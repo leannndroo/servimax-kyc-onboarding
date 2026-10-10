@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Servimax KYC",
+    "slug": "servimax-kyc-onboarding",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Usamos la cámara para tomar la foto de tu cédula.",
+        "NSPhotoLibraryUsageDescription": "Usamos tu galería para cargar la foto de tu cédula."
+      }
+    },
+    "android": {
+      "package": "co.servimax.kyc",
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Usamos la cámara para tomar la foto de tu cédula.",
+          "photosPermission": "Usamos tu galería para cargar la foto de tu cédula."
+        }
+      ],
+      "expo-sharing",
+      "expo-status-bar"
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependencias
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Verificar tipos
+        run: npm run typecheck
+      - name: Tests (unitarios + integración)
+        run: npm test
+      - name: Compilar
+        run: npm run build
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependencias
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Verificar tipos
+        run: npm run typecheck
+      - name: Verificar compatibilidad de versiones de Expo
+        run: npx expo install --check

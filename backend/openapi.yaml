@@ -1,0 +1,172 @@
+openapi: 3.0.3
+info:
+  title: Servimax · Onboarding KYC de tenderos
+  version: 1.0.0
+  description: |
+    API de orquestación del onboarding KYC. Flujo:
+    registro → documentos → OCR → confirmación → consultas (verification) → resultado e informe.
+    Todos los errores responden `{ error: { code, message, details? } }`.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Estado del servicio
+      responses: { '200': { description: OK } }
+  /api/v1/onboarding:
+    post:
+      summary: Crea la sesión con el registro del tendero
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Registration' }
+      responses:
+        '201': { description: Sesión creada, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/v1/onboarding/{id}:
+    get:
+      summary: Sesión completa con bitácora de decisión
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/onboarding/{id}/documents:
+    post:
+      summary: Carga frente y reverso de la cédula (JPG/PNG)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [front, back]
+              properties:
+                front: { type: string, format: binary }
+                back: { type: string, format: binary }
+      responses:
+        '200': { description: Documentos recibidos con advertencias de calidad }
+        '400': { description: 'MISSING_IMAGE · UNREADABLE_IMAGE · INVALID_IMAGE_TYPE · LOW_QUALITY_IMAGE' }
+        '413': { description: IMAGE_TOO_LARGE }
+  /api/v1/onboarding/{id}/ocr:
+    post:
+      summary: Ejecuta (o salta) el OCR. Los fallos del proveedor responden 200 con status FAILED.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { useOcr: { type: boolean, default: true } } }
+      responses:
+        '200':
+          description: Resultado OCR
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [SUCCESS, PARTIAL, NO_RESULTS, FAILED, SKIPPED] }
+                  fields: { $ref: '#/components/schemas/Confirmation' }
+                  missingFields: { type: array, items: { type: string } }
+                  message: { type: string }
+        '410': { description: IMAGES_EXPIRED (volver a cargar las fotos) }
+  /api/v1/onboarding/{id}/confirmation:
+    put:
+      summary: Datos revisados/corregidos por el usuario
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Confirmation' } } }
+      responses:
+        '200': { description: OK }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/v1/onboarding/{id}/manual-review:
+    post:
+      summary: Escala la sesión a revisión manual
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } }
+      responses: { '200': { description: OK } }
+  /api/v1/onboarding/{id}/verification:
+    post:
+      summary: Ejecuta las consultas KYC y calcula score y decisión (se puede repetir para reintentar)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Sesión con queries y result }
+        '409': { description: NOT_CONFIRMED }
+  /api/v1/onboarding/{id}/report:
+    get:
+      summary: Informe descargable
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: format, in: query, schema: { type: string, enum: [pdf, json, csv], default: pdf } }
+      responses:
+        '200': { description: Archivo del informe }
+        '409': { description: NOT_COMPLETED }
+        '500': { description: REPORT_FAILED }
+  /api/v1/metrics:
+    get:
+      summary: Métricas agregadas (registros, decisiones, consultas, errores, duración, score promedio)
+      responses: { '200': { description: OK } }
+  /mock-kyc/v1/identity/verify:
+    post:
+      summary: '[MOCK] Verificación contra registro de identidad (requiere header x-api-key)'
+      description: 'Escenarios por último dígito: 0 apellidos no coinciden · 2 cancelada · 3 timeout · 4 HTTP 503 · 5 respuesta inválida.'
+      responses: { '200': { description: '{ requestId, found, documentStatus, matches }' } }
+  /mock-kyc/v1/watchlists/screen:
+    post:
+      summary: '[MOCK] Listas restrictivas (requiere header x-api-key). Último dígito 1 → coincidencia.'
+      responses: { '200': { description: '{ requestId, checkedLists, hits }' } }
+components:
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Error:
+      description: Error con código estable
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties: { code: { type: string }, message: { type: string }, details: { type: object } }
+  schemas:
+    Registration:
+      type: object
+      required: [fullName, documentType, documentNumber, phone, email, city]
+      properties:
+        fullName: { type: string, example: Juan Carlos Pérez Gómez }
+        documentType: { type: string, enum: [CC, CE] }
+        documentNumber: { type: string, example: '1023456789' }
+        phone: { type: string, example: '3001234567' }
+        email: { type: string, example: juan@correo.com }
+        city: { type: string, example: Bogotá }
+    Confirmation:
+      type: object
+      required: [firstNames, lastNames, documentNumber, birthDate, issuePlace]
+      properties:
+        firstNames: { type: string }
+        lastNames: { type: string }
+        documentNumber: { type: string }
+        birthDate: { type: string, example: '1990-03-15' }
+        issuePlace: { type: string }
+        issueDate: { type: string }
+    Session:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        registration: { $ref: '#/components/schemas/Registration' }
+        ocr: { type: object }
+        confirmed: { type: object }
+        queries: { type: array, items: { type: object } }
+        result:
+          type: object
+          properties:
+            score: { type: integer }
+            decision: { type: string, enum: [VALIDATED, REQUIRES_REVIEW, NOT_VALIDATED] }
+            factors: { type: array, items: { type: object } }
+            alerts: { type: array, items: { type: object } }
+        log: { type: array, items: { type: object } }

@@ -1,0 +1,15 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATA_FILE: /app/data/sessions.json
+    volumes:
+      - kyc-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  kyc-data:
