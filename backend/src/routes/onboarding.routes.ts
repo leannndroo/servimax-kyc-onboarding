@@ -43,7 +43,7 @@ export function createOnboardingRouter(service: OnboardingService, maxImageMb: n
   router.post('/onboarding/:id/documents', upload.fields([{ name: 'front', maxCount: 1 }, { name: 'back', maxCount: 1 }]), (req, res) => {
     const files = (req.files ?? {}) as Record<string, Express.Multer.File[] | undefined>;
     const pick = (f?: Express.Multer.File[]) => (f?.[0] ? { buffer: f[0].buffer, size: f[0].size } : undefined);
-    const session = service.uploadDocuments(req.params.id, { front: pick(files.front), back: pick(files.back) });
+   const session = service.uploadDocuments(String(req.params.id), { front: pick(files.front), back: pick(files.back) });
     res.json({ documents: session.documents, status: session.status });
   });
 
